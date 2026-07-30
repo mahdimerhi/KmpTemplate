@@ -1,0 +1,224 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
+package com.template.feature.home.presentation
+
+import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import com.template.feature.home.api.ItemEntity
+import dev.zacsweers.metrox.viewmodel.metroViewModel
+import kmptemplate.feature.home.presentation.generated.resources.Res
+import kmptemplate.feature.home.presentation.generated.resources.feature_home_settings
+import org.jetbrains.compose.resources.painterResource
+
+@Composable
+fun Home(
+    sharedTransitionScope: SharedTransitionScope,
+    animatedContentScope: AnimatedContentScope,
+    onDetailClick: (Long) -> Unit,
+    onSettingsClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val viewModel = metroViewModel<HomeViewModel>()
+    LaunchedEffect(Unit) { viewModel.load() }
+    val screen by viewModel.screen.collectAsStateWithLifecycle()
+    Screen(
+        sharedTransitionScope = sharedTransitionScope,
+        animatedContentScope = animatedContentScope,
+        screen = screen,
+        onAction = viewModel::onAction,
+        onDetailClick = onDetailClick,
+        onSettingsClick = onSettingsClick,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun Screen(
+    sharedTransitionScope: SharedTransitionScope,
+    animatedContentScope: AnimatedContentScope,
+    screen: HomeViewModel.Screen,
+    onAction: (HomeViewModel.Action) -> Unit,
+    onDetailClick: (Long) -> Unit,
+    onSettingsClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            sharedTransitionScope.run {
+                TopAppBar(
+                    title = { Text("Items") },
+                    actions = {
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(
+                                painter = painterResource(Res.drawable.feature_home_settings),
+                                contentDescription = "Settings",
+                            )
+                        }
+                    },
+                    modifier = Modifier.renderInSharedTransitionScopeOverlay(
+                        zIndexInOverlay = 1f,
+                    ),
+                )
+            }
+        },
+    ) { padding ->
+        val items = screen.items
+        if (items != null) {
+            ItemList(
+                items = items,
+                onItemClick = { onDetailClick(it.id) },
+                onLoadMore = { onAction(HomeViewModel.Action.LoadMoreItems) },
+                sharedTransitionScope = sharedTransitionScope,
+                animatedContentScope = animatedContentScope,
+                modifier = Modifier.fillMaxSize(),
+                padding = padding,
+            )
+        } else {
+            Box(modifier = Modifier.fillMaxSize()) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ItemList(
+    items: List<ItemEntity>,
+    onItemClick: (ItemEntity) -> Unit,
+    onLoadMore: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedContentScope: AnimatedContentScope,
+    modifier: Modifier = Modifier,
+    padding: PaddingValues = PaddingValues(0.dp),
+) {
+    val state = rememberLazyStaggeredGridState()
+
+    val currentOnLoadMore by rememberUpdatedState(onLoadMore)
+    val firstVisibleItemIndex = state.firstVisibleItemIndex
+    LaunchedEffect(items.size, firstVisibleItemIndex) {
+        if (items.size - firstVisibleItemIndex >= 10) return@LaunchedEffect
+        currentOnLoadMore()
+    }
+
+    val layoutDirection = LocalLayoutDirection.current
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Adaptive(240.dp),
+        modifier = modifier,
+        state = state,
+        contentPadding = PaddingValues(
+            start = padding.calculateStartPadding(layoutDirection) + 16.dp,
+            top = padding.calculateTopPadding() + 16.dp,
+            end = padding.calculateEndPadding(layoutDirection) + 16.dp,
+            bottom = padding.calculateBottomPadding() + 16.dp
+        ),
+        verticalItemSpacing = 16.dp,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        items(items = items, key = { it.id }) { item ->
+            ItemItem(
+                id = item.id,
+                title = item.title,
+                imageUrl = item.imageUrl,
+                body = item.body,
+                sharedTransitionScope = sharedTransitionScope,
+                animatedContentScope = animatedContentScope,
+                modifier = Modifier
+                    .animateItem()
+                    .clickable { onItemClick(item) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ItemItem(
+    id: Long,
+    title: String,
+    imageUrl: String?,
+    body: String,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedContentScope: AnimatedContentScope,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier) {
+        Column {
+            sharedTransitionScope.run {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalPlatformContext.current)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .placeholderMemoryCacheKey(imageUrl)
+                        .memoryCacheKey(imageUrl)
+                        .build(),
+                    contentDescription = title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .sharedElement(
+                            sharedContentState = sharedTransitionScope
+                                .rememberSharedContentState(id),
+                            animatedVisibilityScope = animatedContentScope,
+                        )
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clip(CardDefaults.shape),
+                )
+            }
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = body.trim(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 5,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
